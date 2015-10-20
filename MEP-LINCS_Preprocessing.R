@@ -16,6 +16,11 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   library("MEMA")#merge, annotate and normalize functions
   library("data.table")#fast file reads, data merges and subsetting
   library("parallel")#use multiple cores for faster processing
+  library(tidyr)
+  library(dplyr)
+  library(synapseClient)
+  
+  synapseLogin()
   
   #select analysis version
   analysisVersion <- "v1"
