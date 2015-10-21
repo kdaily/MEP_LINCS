@@ -1,5 +1,6 @@
 library(synapseClient)
 library(tidyr)
+library(plyr)
 library(dplyr)
 library(stringr)
 library(rGithubClient)
@@ -35,13 +36,12 @@ for(cellLine in c("PC3", "MCF7", "YAPC")){
     # Take file names and turn into basic annotation set
     # Replace this with a better way to get basic annotations from 
     # a standardized source
-    dataFiles <- data.frame(filename=list.files(path=dataDir, full.names = TRUE), stringsAsFactors = FALSE) %>%
+    dataFiles <- data.frame(filename=list.files(path=dataDir, pattern = ".xlsx", full.names = TRUE), stringsAsFactors = FALSE) %>%
       mutate(level=0,
              CellLine=cellLine,
              StainingSet=ss,
-             Filename=as.character(filename),
              basename=str_replace(filename, ".*/", "")) %>% 
-      mutate(basename=str_replace(basename, "\\.xls", "")) %>% 
+      mutate(basename=str_replace(basename, "\\.xlsx", "")) %>% 
       separate(basename, c("Barcode" ))
     
     res <- dlply(dataFiles[, ], .(filename), uploadToSynapse, parentId=synapseRawDataDir)

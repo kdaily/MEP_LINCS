@@ -1,5 +1,6 @@
 library(synapseClient)
 library(tidyr)
+library(plyr)
 library(dplyr)
 library(stringr)
 library(rGithubClient)
@@ -44,7 +45,7 @@ for(cellLine in c("PC3", "MCF7", "YAPC")){
       mutate(basename=str_replace(basename, "\\.csv", "")) %>% 
       separate(basename, c("Barcode", "Well", "Location"))
     
-    res <- dlply(dataFiles[, ], .(filename), uploadToSynapse, parentId=synapseRawDataDir)
+    res <- dlply(dataFiles[,], .(filename), uploadToSynapse, parentId=synapseRawDataDir)
     
   }
 }

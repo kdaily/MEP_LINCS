@@ -1,15 +1,17 @@
-
-#title: "MEP-LINCs Preprocessing"
-#author: "Mark Dane"
+# author: Mark Dane
 # 9/30/2015
 
-##Introduction
 
-#   The MEP-LINCs dataset contains imaging data from a Nikon automated microscope that is analyzed with a CellProfiler pipeline.
+# The MEP-LINCs dataset contains imaging data from a Nikon automated microscope
+# that is analyzed with a #CellProfiler pipeline.
 # 
-# Part of this preprocessing of the dataset will be deprecated when the merging of the data and metadata happens within the CellProfiler part of the pipeline. For now, the metadata about the ECM proteins is read from the GAL file and the metadata about the wells (cell line, stains and ligands) is read from Excel spreadsheets.
+# Part of this preprocessing of the dataset will be deprecated when the merging 
+#of the data and metadata #happens within the CellProfiler part of the pipeline. 
+#For now, the metadata about the ECM proteins is #read from the GAL file and the 
+#metadata about the wells (cell line, stains and ligands) is read from #Excel 
+#spreadsheets.
 
-library("parallel")#use multiple cores for faster processing
+library("parallel") #use multiple cores for faster processing
 
 preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   library("limma")#read GAL file and strsplit2
@@ -19,8 +21,13 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   library(tidyr)
   library(dplyr)
   library(synapseClient)
+  library(rGithubClient)
   
   synapseLogin()
+  
+  
+  repo <- getRepo("MEP-LINCS/MEP_LINCS_Pilot", ref="branch", refName="accessSynapse")
+  thisScript <- getPermlink(repo, "MEP-LINCS_Preprocessing.R")
   
   #select analysis version
   analysisVersion <- "v1"
@@ -63,74 +70,77 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   #Set a threshold for the lowSpotReplicates flag
   lowReplicateCount <- 3
   
-  ##Summary
   # This script prepares cell-level data and metadata for the MEP LINCs Analysis Pipeline. 
   # 
-  # In the code, the variable ss determines which staining set (SS1, SS2 or SS3) to merge and the variable cellLine determines the cell line (PC3,MCF7, etc). All .txt data files in the "./RawData" folder will be merged with the well (xlsx) and log (XML) data from the "./Metadata" folder.
+  # In the code, the variable ss determines which staining set (SS1, SS2 or SS3)
+  # to merge and the variable cellLine determines the cell line (PC3,MCF7, etc). 
+  # All .txt data files in the "./RawData" folder will be merged with the well (xlsx)
+  # and log (XML) data from the "./Metadata" folder.
   # 
-  # The merging assumes that the actual, physical B row wells (B01-B04) have been printed upside-down. That is, rotated 180 degrees resulting in the spot 1, 1 being in the lower right corner instead of the upper left corner. The metadata is matched to the actual printed orientation.
+  # The merging assumes that the actual, physical B row wells (B01-B04) have been
+  # printed upside-down. That is, rotated 180 degrees resulting in the spot 1, 1 
+  # being in the lower right corner instead of the upper left corner. The metadata
+  # is matched to the actual printed orientation.
   
   # Read and clean spotmetadata
+  # Find GAL file
+  q <- sprintf("select id from file where parentId=='syn4997970' and fileType=='gal'")
+  qr <- synQuery(q)
+  galId <- qr$file.id
   
   #Read in the spot metadata from the gal file
-  smd <- readSpotMetadata(paste0("./",cellLine,"/",ss,"/Metadata/20150515_LI8X001_v1.2.gal"))
+  smdFile <- synGet(galId)
+  smd <- readSpotMetadata(getFileLocation(smdFile))
+  
   #Relabel the column Name to ECMpAnnotID
   setnames(smd, "Name", "ECMpAnnotID")
   
   #Add the print order and deposition number to the metadata
-  ldf <- readLogData(paste0("./",cellLine,"/",ss,"/Metadata/20150512-112336.xml"))
+  # Find XML file
+  q <- sprintf("select id from file where parentId=='syn4997970' and fileType=='xml' ")
+  qr <- synQuery(q)
+  xmlId <- qr$file.id
+  ldfFile <- synGet(xmlId)
+  ldf <- readLogData(getFileLocation(ldfFile))
+  
   spotMetadata <- merge(smd,ldf, all=TRUE)
   setkey(spotMetadata,Spot)
+  
   #Make a rotated version of the spot metadata to match the print orientation
   spotMetadata180 <- rotateMetadata(spotMetadata)
   ARowMetadata <- data.table(spotMetadata,Well=rep(c("A01", "A02","A03","A04"),each=nrow(spotMetadata)))
   BRowMetadata <- data.table(spotMetadata180,Well=rep(c("B01", "B02","B03","B04"),each=nrow(spotMetadata180)))
+
+  q <- sprintf("select id,name,Well,Barcode,dataSubType from file where parentId=='syn4997435' and level==0 and CellLine=='%s' and StainingSet=='%s'", cellLine, ss)
+  qdata <- synQuery(q)
   
-  # The well metadata describes the cell line, ligands and staining endpoints that are all added on a per well basis. There is one mutlisheet .xlsx file for each plate. Each filename is the plate's barcode.
-  
-  
-  # The raw data from all wells in all plates in the dataset are read in and merged with their spot and well metadata. The number of nuclei at each spot are counted and a loess model of the spot cell count is added. Then all intensity values are normalized through dividing them by the median intensity value of the control well in the same plate.
-  # 
-  # Next, the data is filtered to remove objects with a nuclear area less than nuclearAreaThresh pixels or more than nuclearAreaHiThresh pixels.
-  
-  #merge_normalize_QA, echo=FALSE}
-  #The next steps are to bring in the well metadata, the print order and the CP data
-  
-  cellDataFiles <- dir(paste0("./",cellLine,"/", ss,"/RawData/",analysisVersion),full.names = TRUE)
-  splits <- strsplit2(strsplit2(cellDataFiles,split = "_")[,1],"/")
-  
-  if(limitBarcodes) {
-    barcodes <- unique(splits[,ncol(splits)])[1:limitBarcodes] 
-  } else barcodes <- unique(splits[,ncol(splits)])
+  barcodes <- unique(qdata$file.Barcode)[1:limitBarcodes]
+  cellDataFiles <- qdata$file.id
   
   expDTList <- mclapply(barcodes, function(barcode){
     #browser()
-    plateDataFiles <- grep(barcode,cellDataFiles,value = TRUE)
-    wells <- unique(strsplit2(split = "_",plateDataFiles)[,2])
+    plateDataFiles <- qdata[qdata$file.Barcode ==barcode,]
+    wells <- unique(plateDataFiles$file.Well)
     wellDataList <- lapply(wells,function(well){
       #browser()
-      wellDataFiles <- grep(well,plateDataFiles,value = TRUE)
-      #imageDataFile <- grep("Image",wellDataFiles,value=TRUE,
-      #                     ignore.case = TRUE)
-      nucleiDataFile <- grep("Nuclei",wellDataFiles,value=TRUE,
-                             ignore.case = TRUE)
+      wellDataFiles <- plateDataFiles[plateDataFiles$file.Well ==well,]
+      imageDataFile <- wellDataFiles$file.id[grepl("Image", wellDataFiles$file.name)]
+      nucleiDataFile <- wellDataFiles$file.id[grepl("Nuclei", wellDataFiles$file.name)]
       if (ss %in% c("SS1","SS3")){
-        cellsDataFile <- grep("Cell",wellDataFiles,value=TRUE,
-                              ignore.case = TRUE)
-        cytoplasmDataFile <- grep("Cytoplasm",wellDataFiles,value=TRUE,
-                                  ignore.case = TRUE)
+        cellsDataFile <- wellDataFiles$file.id[grepl("Cell", wellDataFiles$file.name)]
+        cytoplasmDataFile <- wellDataFiles$file.id[grepl("Cytoplasm", wellDataFiles$file.name)]
       }
       #Read in csv data
       #image <- convertColumnNames(fread(imageDataFile))
       #setkey(image,CP_ImageNumber)
-      nuclei <- convertColumnNames(fread(nucleiDataFile))
+      nuclei <- convertColumnNames(fread(getFileLocation(synGet(nucleiDataFile))))
       if (curatedOnly) nuclei <- nuclei[,grep(curatedCols,colnames(nuclei)), with=FALSE]
       setkey(nuclei,CP_ImageNumber,CP_ObjectNumber)
       if (ss %in% c("SS1","SS3")){
-        cells <- convertColumnNames(fread(cellsDataFile))
+        cells <- convertColumnNames(fread(getFileLocation(synGet(cellsDataFile))))
         if (curatedOnly) cells <- cells[,grep(curatedCols,colnames(cells)), with=FALSE]
         setkey(cells,CP_ImageNumber,CP_ObjectNumber)
-        cytoplasm <- convertColumnNames(fread(cytoplasmDataFile))
+        cytoplasm <- convertColumnNames(fread(getFileLocation(synGet(cytoplasmDataFile))))
         if (curatedOnly) cytoplasm <- cytoplasm[,grep(curatedCols,colnames(cytoplasm)), with=FALSE]
         setkey(cytoplasm,CP_ImageNumber,CP_ObjectNumber)
       }
@@ -172,10 +182,14 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
     #browser()
     #Create the cell data.table with spot metadata for the plate 
     pcDT <- rbindlist(wellDataList, fill = TRUE)
-    #Read the well metadata from a multi-sheet Excel file
-    wellMetadata <- data.table(readMetadata(paste0("./",cellLine,"/",
-                                                   ss,"/Metadata/",barcode,".xlsx")), key="Well")
     
+    # Find well metadata file
+    q <- sprintf("select id from file where parentId=='syn4997976' and Barcode=='%s'",barcode)
+    qr <- synQuery(q)
+    wellMetadataId <- qr$file.id
+    
+    wellMetadata <- data.table(readMetadata(getFileLocation(synGet(wellMetadataId))))
+
     #merge well metadata with the data and spot metadata
     pcDT <- merge(pcDT,wellMetadata,by = "Well")
     pcDT <- pcDT[,Barcode := barcode]
@@ -268,19 +282,6 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   cDT <- denseOuterDT[,list(Barcode,Well,Spot,ObjectNumber,Spot_PA_Perimeter)][cDT]
   cDT$Spot_PA_Perimeter[is.na(cDT$Spot_PA_Perimeter)] <- FALSE
   
-  
-  # After merging the metadata with the cell-level data, several types of derived parameters are added. These include:
-  #   
-  #   The origin of coordinate system is placed at the median X and Y of each spot and the local cartesian and polar coordinates are added to the dataset.
-  # 
-  # The number of nuclei within three nuclear radii of `r densityRadius ` around each nuclei is counted and stored as a neighbor count parameter. The neighbor count value is thresholded to classify each cell as Sparse or not.The distance from the local origin is used to classify each cell as an OuterCell or not. The Sparse, OutCell and Wedge classifications are used to classify each cell as a Perimeter cell or not. 
-  # 
-  # For staining set 2, each cell is classified as EdU+ or EdU-. The threshold for EdU+ is based on kmeans threshold of the mean EdU intensity from the control well of each plate.
-  # 
-  # The intensity values are normalized at each spot so that spot-level variations can be analyzed.
-  # 
-  # The cell level raw data and metadata is saved as Level 1 data. Normalized values are added to the dataset and saved as Level 2 data.
-  
   # Eliminate Variations in the Endpoint metadata
   endpointNames <- grep("End",colnames(cDT), value=TRUE)
   endpointWL <- regmatches(endpointNames,regexpr("[[:digit:]]{3}|DAPI",endpointNames))
@@ -301,19 +302,15 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   cDT <- rbindlist(nDTList)
   setkey(cDT,Barcode,Well,Spot,ObjectNumber)
   cDT <- merge(cDT,mdKeep)
-  
-  #The cell-level data is median summarized to the spot level and coefficients of variations on the replicates are calculated. The spot level data and metadata are saved as Level 3 data.
-  
+ 
   #### Level3 ####
   slDT <- createl3(cDT, lthresh)
-  
   
   #Add QA scores to cell level data####
   setkey(cDT,Barcode, Well, Spot)
   setkey(slDT, Barcode, Well, Spot)
   cDT <- cDT[slDT[,list(Barcode, Well, Spot, QAScore, Spot_PA_LoessSCC)]]
-  #The spot level data is median summarized to the replicate level and is stored as Level 4 data and metadata.
-  
+
   #Level4Data
   mepDT <- createl4(slDT)
   
@@ -335,7 +332,6 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   slDT$QA_LowDAPIQuality[slDT$Barcode=="LI8X00426"] <- TRUE
   slDT$QA_LowDAPIQuality[slDT$Barcode=="LI8X00427"] <- TRUE
   
-  
   #Flag spots below automatically loess QA threshold
   cDT$QA_LowRegionCellCount <- cDT$Spot_PA_LoessSCC < lowRegionCellCountThreshold
   slDT$QA_LowRegionCellCount <- slDT$Spot_PA_LoessSCC < lowRegionCellCountThreshold
@@ -349,13 +345,33 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   #Level 4
   mepDT$QA_LowReplicateCount <- mepDT$Spot_PA_ReplicateCount < lowReplicateCount
   
+  # Take row of data frame with filename and annots
+  # Upload to Synapse and set annotations
+  uploadToSynapse <- function(x, parentId) {
+    annots <- toAnnotationList(x)
+    obj <- File(x$filename, parentId=parentId)
+    synSetAnnotations(obj) <- annots
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
+    obj
+  }
+  
   #WriteData
   
   if(writeFiles){
     #Write out cDT without normalized values as level 1 dataset
     level1Names <- grep("Norm",colnames(cDT),value=TRUE,invert=TRUE)
-    write.table(format(cDT[,level1Names, with=FALSE], digits=4, trim=TRUE), paste0("./",cellLine,"/", ss, "/AnnotatedData/", unique(cDT$CellLine),"_",ss,"_","Level1.txt"), sep = "\t",row.names = FALSE, quote=FALSE)
+    level1 <- format(cDT[,level1Names, with=FALSE], digits=4, trim=TRUE)
+    write.table(level1, paste0("./",cellLine,"/", ss, "/AnnotatedData/", cellLine,"_",ss,"_","Level1.txt"), sep = "\t",row.names = FALSE, quote=FALSE)
     
+    #Upload annotated data to Synapse
+    annotationList <- list(CellLine=cellLine,StainingSet=ss,level=1, fileType="tsv")
+    obj <- File(paste0("./",cellLine,"/", ss, "/AnnotatedData/", cellLine,"_",ss,"_","Level1.txt"), parentId="syn5004301")
+    synSetAnnotations(obj) <- annotationList
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
+    
+    #Create level 2 dataset
     normParmameterNames <- grep("Norm",colnames(cDT), value=TRUE)
     rawParameterNames <- gsub("_?[[:alnum:]]*?Norm$", "", normParmameterNames)
     metadataNormNames <- colnames(cDT)[!colnames(cDT) %in% rawParameterNames]
@@ -367,9 +383,26 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
     #Write out cDT with normalized values as level 2 dataset
     write.table(format(cDT[,level2Names, with = FALSE], digits=4, trim=TRUE), paste0("./",cellLine,"/", ss, "/AnnotatedData/", unique(cDT$CellLine),"_",ss,"_","Level2.txt"), sep = "\t",row.names = FALSE, quote=FALSE)
     
+    #Upload level 2 to Synapse
+    annotationList <- list(CellLine=cellLine, StainingSet=ss,level=2, fileType="tsv")
+    obj <- File(paste0("./",cellLine,"/", ss, "/AnnotatedData/", cellLine,"_",ss,"_","Level2.txt"), parentId="syn5004301")
+    synSetAnnotations(obj) <- annotationList
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
+    
+    #Level 3
     write.table(format(slDT, digits = 4, trim=TRUE), paste0("./",cellLine,"/", ss, "/AnnotatedData/", unique(slDT$CellLine),"_",ss,"_","Level3.txt"), sep = "\t",row.names = FALSE, quote=FALSE)
+    #Upload level 3 to Synapse
+    obj <- File(paste0("./",cellLine,"/", ss, "/AnnotatedData/", cellLine,"_",ss,"_","Level3.txt"), parentId="syn5004301")
+    synSetAnnotations(obj) <- list(CellLine=cellLine, StainingSet=ss,level=3, fileType="tsv")
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
     
     write.table(format(mepDT, digits = 4, trim=TRUE), paste0("./",cellLine,"/",ss, "/AnnotatedData/", unique(slDT$CellLine),"_",ss,"_","Level4.txt"), sep = "\t",row.names = FALSE, quote=FALSE)
+    obj <- File(paste0("./",cellLine,"/", ss, "/AnnotatedData/", cellLine,"_",ss,"_","Level4.txt"), parentId="syn5004301")
+    synSetAnnotations(obj) <- list(CellLine=cellLine, StainingSet=ss,level=4, fileType="tsv")
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
     
     #Write the pipeline parameters to  tab-delimited file
     write.table(c(
@@ -394,6 +427,12 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
       lthresh = lthresh
     ),
     paste0("./",cellLine,"/",ss, "/AnnotatedData/", cellLine,"_",ss,"_","PipelineParameters.txt"), sep = "\t",col.names = FALSE, quote=FALSE)
+    
+    #Upload pipeline parameters to Synapse Metadata directory
+    obj <- File( paste0("./",cellLine,"/",ss, "/AnnotatedData/", cellLine,"_",ss,"_","PipelineParameters.txt"), parentId="syn4997970")
+    synSetAnnotations(obj) <- list(CellLine=cellLine, StainingSet=ss,fileType="Pipeline Parameters", fileType="txt")
+    obj <- synStore(obj, forceVersion=FALSE, 
+                    activityName="Upload", executed=thisScript)
   }
 }
 
