@@ -8,7 +8,7 @@ library(rGithubClient)
 synapseLogin()
 
 repo <- getRepo("MEP-LINCS/MEP_LINCS_Pilot", ref="branch", refName="accessSynapse")
-thisScript <- getPermlink(repo, "uploadMetadata.R")
+thisScript <- getPermlink(repo, "uploadAnnotatedData.R")
 
 synapseRawDataDir <- "syn4997976"
 synapseAnnotatedDataDir <- "syn5004301"
