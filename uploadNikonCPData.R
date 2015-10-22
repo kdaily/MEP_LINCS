@@ -30,7 +30,7 @@ uploadToSynapse <- function(x, parentId) {
   obj
 }
 
-for(cellLine in c("PC3", "MCF7", "YAPC")){
+for(cellLine in c("YAPC")){
   for (ss in c("SS1", "SS2", "SS3")){
     dataDir <- paste("/Users/dane/Documents/MEP-LINCS",cellLine,ss,"RawData/v1", sep = "/")
     # Take file names and turn into basic annotation set

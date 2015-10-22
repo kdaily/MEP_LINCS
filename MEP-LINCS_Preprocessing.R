@@ -117,7 +117,8 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
   barcodes <- unique(qdata$file.Barcode)[1:limitBarcodes]
   cellDataFiles <- qdata$file.id
   
-  expDTList <- mclapply(barcodes, function(barcode){
+  expDTList <- lapply(barcodes, function(barcode){
+    
     #browser()
     plateDataFiles <- qdata[qdata$file.Barcode ==barcode,]
     wells <- unique(plateDataFiles$file.Well)
@@ -256,7 +257,7 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
     } else stop("Invalid ss parameter")
     #browser()
     return(pcDT)
-  }, mc.cores=detectCores())
+  })
   
   cDT <- rbindlist(expDTList, fill = TRUE)
   #TODO delete unwanted columns here such as Euler Number
@@ -438,5 +439,5 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
 
 cDir <- getwd()
 setwd("../MEP-LINCS/")
-preprocessMEPLINCS(ss="SS2",cellLine="PC3",limitBarcodes = 8, writeFiles = TRUE)
+preprocessMEPLINCS(ss="SS1",cellLine="PC3",limitBarcodes = 8, writeFiles = TRUE)
 setwd(cDir)
