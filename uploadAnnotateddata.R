@@ -39,12 +39,10 @@ for(cellLine in c("PC3","MCF7", "YAPC")){
     # Replace this with a better way to get basic annotations from 
     # a standardized source
     dataFiles <- data.frame(filename=list.files(path=dataDir, pattern = ".txt", full.names = TRUE), stringsAsFactors = FALSE) %>%
-      mutate(CellLine=cellLine,
-             StainingSet=ss,
-             fileType="tsv",
+      mutate(fileType="tsv",
              basename=str_replace(filename, ".*/", "")) %>% 
       mutate(basename=str_replace(basename, "\\.txt", "")) %>% 
-      separate(basename, c("CellLine","ss","level" ))
+      separate(basename, c("CellLine","StainingSet","level" ))
     dataFiles$level <- str_replace(dataFiles$level, "Level", "")
     
     res <- dlply(dataFiles[, ], .(filename), uploadToSynapse, parentId=synapseAnnotatedDataDir)
