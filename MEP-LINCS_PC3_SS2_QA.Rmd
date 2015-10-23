@@ -11,8 +11,21 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 ```{r, echo=FALSE}
 #Author: Mark Dane, copyright 2015
 
+plotLEHmap <- function(dt, fill, titleExpression){
+  p <- ggplot(dt, aes_string(x="Ligand", y="ECMp", fill = fill))+
+    geom_tile()+
+    scale_fill_gradient(low="white",high="red",oob = scales::squish,
+                        limits=(quantile(dt[[fill]], probs=c(.01, .99), na.rm=TRUE)))+
+    ggtitle(titleExpression)+
+    xlab("")+ylab("")+
+    guides(fill=FALSE)+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.7)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.7)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
+  suppressWarnings(print(p))
+}
+
 source("MEPLINCSFunctions.R")
 supportingPlots = FALSE
+runRUV2S = TRUE
 
 #Set the staining set to be analyzed (SS1|SS2|SS3)
 ss <- "SS2"
@@ -25,6 +38,7 @@ cellLine <- "PC3"
 ```{r setup}
 library("ggplot2")
 library("data.table")
+library("limma")
 library("MEMA")
 library("grid")
 library(knitr)
@@ -46,12 +60,60 @@ setkey(l1, "ECMp")
 l1 <- l1[!"fiducial"]
 l1 <- l1[!"blank"]
 
+#Logit transform DNA2NProportion
+#logit(p) = log[p/(1-p)]
+DNA2NImpute <- l1$Nuclei_PA_Cycle_DNA2NProportion
+DNA2NImpute[DNA2NImpute==0] <- .01
+DNA2NImpute[DNA2NImpute==1] <- .99
+l1$Nuclei_PA_Cycle_DNA2NProportionLogit <- log2(DNA2NImpute/(1-DNA2NImpute))
+
+
+#Create spot level dataset
+l3 <- l1[,list(Ligand=unique(Ligand), LigandAnnotID=unique(LigandAnnotID),
+               ECMp=unique(ECMp), ECMpAnnotID=unique(ECMpAnnotID),
+               MEP=unique(MEP),
+               Row=unique(Row), Column = unique(Column), Block=unique(Block), ID=unique(ID),
+               ArrayRow=unique(ArrayRow), ArrayColumn=unique(ArrayColumn),
+               mel = median(Nuclei_PA_Gated_EduPositiveLogit, na.rm=TRUE),
+               DNA2Nmel = median(Nuclei_PA_Cycle_DNA2NProportionLogit, na.rm=TRUE),
+               SCCmel = as.numeric(median(Spot_PA_SpotCellCount, na.rm=TRUE))),
+         by="Barcode,Well,Spot"]
+#Create random sample sets
+set.seed(1234)
+l3 <-l3[,Sample := sample(1:.N, .N, replace=FALSE), by=MEP]
+
 l1MEPs <- l1[,list(mel = median(Nuclei_PA_Gated_EduPositiveLogit, na.rm = TRUE),
                    Mel = mad(Nuclei_PA_Gated_EduPositiveLogit, na.rm= TRUE),
                    melPP = median(Nuclei_PA_Gated_EduPositiveProportion, na.rm = TRUE),
                    MelPP = mad(Nuclei_PA_Gated_EduPositiveProportion, na.rm= TRUE)),
              by="Barcode,Well,Ligand,ECMp,MEP"]
+```
 
+```{r RUV2+Shrinkage, eval=runRUV2S}
+
+runNaiveRUV2S <- function(nu, Y, cIdx, k){
+  nY <- naiveRandRUV(Y, cIdx, nu, k)
+  #Median summarize the normalized values
+  nYm <- apply(nY,2, median, na.rm=TRUE)
+  #Create a data.table
+  nYm <- data.table(mel=nYm, MEP=names(nYm), Mel=apply(nY,2, mad, na.rm=TRUE))
+  nYm$ECMp <- strsplit2(nYm$MEP, split="_")[,1]
+  nYm$Ligand <- sub("[[:alnum:]]*_","",nYm$MEP)
+  return(nYm)
+}
+
+#Randomly sample 8 replicates of each MEP type 
+nrReps <- 8
+Y <- setkey(l3[l3$Sample <= nrReps], Sample,MEP)
+
+#Unit of study is array
+Y <- matrix(Y$mel, nrow=nrReps, byrow=TRUE, dimnames=list(paste0("Sample",1:nrReps),Y$MEP[Y$Sample==1] ))
+k <- nrow(Y)
+cIdx <- 1:ncol(Y)
+nu <- 1e-2
+
+#Normalize the set of replicate samples
+nsY <- runNaiveRUV2S(nu, Y, cIdx, k)
 
 ```
 ---
@@ -81,43 +143,46 @@ The proportion is transformed by the logit function defined as logit(p) = log2(p
 
 ```{r, eval=TRUE, fig.width=9, fig.height=6}
 
-p <- ggplot(l1MEPs, aes(x=Ligand, y=ECMp, fill = mel))+
-  geom_tile()+
-  #geom_text(aes(label = round(l1MEPs$mel, 1)), size=rel(1.5))+
-  scale_fill_gradient(low="white",high="red",oob = scales::squish)+
-  ggtitle(expression(EdU^{"+"}~ Medians~(m["e,l"])))+
-  xlab("")+ylab("")+
-  guides(fill=FALSE)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.5)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.5)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
-suppressWarnings(print(p))
+titleExpression <- expression(EdU^{"+"}~ Medians~(m["e,l"]))
+plotLEHmap(l1MEPs, fill="mel", titleExpression)
 
-p <- ggplot(l1MEPs, aes(x=Ligand, y=ECMp, fill = Mel))+
-  geom_tile()+
-    #geom_text(aes(label = round(l1MEPs$Mel, 1)), size=rel(1.5))+
-  scale_fill_gradient(low="white", high="red",oob = scales::squish)+
-  ggtitle(expression(EdU^{"+"}~MADs~(M["e,l"])))+
-  xlab("")+ylab("")+
-  guides(fill=FALSE)+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.5)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.5)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
-suppressWarnings(print(p))
+titleExpression <- expression(EdU^{"+"}~MADs~(M["e,l"]))
+plotLEHmap(l1MEPs, fill="Mel", titleExpression)
+
 
 ```
 
 
+```{r, eval=TRUE, fig.width=9, fig.height=6}
+
+
+for(nu in c(0, 1e-2, 1e-1, 1, 10)){
+  titleExpression <- bquote(EdU^{"+"}~ Medians~(m["e,l"])~RUV~with~Shrinkage~nu~"=" ~.(nu))
+  nsY <- runNaiveRUV2S(nu, Y, cIdx, k)
+  plotLEHmap(dt=nsY, fill="mel", titleExpression)
+}
+
+for(nu in c(0, 1e-2, 1e-1, 1, 10)){
+  titleExpression <- bquote(EdU^{"+"}~ MADs~(M["e,l"])~RUV~with~Shrinkage~nu~"=" ~.(nu))
+  nsY <- runNaiveRUV2S(nu, Y, cIdx, k)
+  plotLEHmap(dt=nsY, fill="Mel", titleExpression)
+}
+
+```
 
 ```{r AddMarginValues}
 
 l1MEPs.l <- l1MEPs[,list(m.l = median(mel, na.rm = TRUE),
-                     M.l = median(Mel, na.rm= TRUE),
-                     m.lPP = median(melPP, na.rm = TRUE),
-                     M.lPP = median(MelPP, na.rm= TRUE)),
-               by="Ligand"]
+                         M.l = median(Mel, na.rm= TRUE),
+                         m.lPP = median(melPP, na.rm = TRUE),
+                         M.lPP = median(MelPP, na.rm= TRUE)),
+                   by="Ligand"]
 
 l1MEPse. <- l1MEPs[,list(me. = median(mel, na.rm = TRUE),
-                     Me. = median(Mel, na.rm= TRUE),
-                     me.PP = median(melPP, na.rm = TRUE),
-                     Me.PP = median(MelPP, na.rm= TRUE)),
-               by="ECMp"]
+                         Me. = median(Mel, na.rm= TRUE),
+                         me.PP = median(melPP, na.rm = TRUE),
+                         Me.PP = median(MelPP, na.rm= TRUE)),
+                   by="ECMp"]
 
 setkey(l1MEPs,Ligand)
 setkey(l1MEPs.l,Ligand)
@@ -237,7 +302,7 @@ cMEPECMp <- cMEPs[,list(ce=median(mel, na.rm=TRUE),
 lMEPs <- l1MEPs[!l1MEPs$Well=="A03"]
 lMEPECMp <- lMEPs[,list(ne=median(mel, na.rm=TRUE),
                         Ne=mad(mel, na.rm=TRUE),
-                  nePP=median(melPP, na.rm=TRUE),
+                        nePP=median(melPP, na.rm=TRUE),
                         NePP=mad(melPP, na.rm=TRUE)),
                   by=ECMp]
 ```
@@ -466,7 +531,7 @@ suppressWarnings(print(p))
 
 p <- ggplot(cMEPECMp, aes(x=ce, y=Ce))+
   geom_point()+
-    stat_smooth(method='loess')+
+  stat_smooth(method='loess')+
   ggtitle(expression(MAD~vs~Median~of~logit(EdU^{"+"})~by~ECMp~of~Control~(c["e,"]*C[e])))
 
 suppressWarnings(print(p))
@@ -495,7 +560,7 @@ suppressWarnings(print(p))
 
 p <- ggplot(cMEPECMp, aes(x=cePP, y=CePP))+
   geom_point()+
-    stat_smooth(method='loess')+
+  stat_smooth(method='loess')+
   ggtitle(expression(MAD~vs~Median~of~EdU^{"+"}~Positive~Proportion~by~ECMp~of~Control~(c["e,"]*C[e])))
 
 suppressWarnings(print(p))
