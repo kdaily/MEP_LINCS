@@ -1,0 +1,283 @@
+---
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=12, fig.height=8,
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+
+```{r, echo=FALSE}
+#Author: Mark Dane, copyright 2015
+
+plotLEHmap <- function(dt, fill, titleExpression){
+  p <- ggplot(dt, aes_string(x="Ligand", y="ECMp", fill = fill))+
+    geom_tile()+
+    scale_fill_gradient(low="white",high="red",oob = scales::squish,
+                        limits=(quantile(dt[[fill]], probs=c(.01, .99), na.rm=TRUE)))+
+    ggtitle(titleExpression)+
+    xlab("")+ylab("")+
+    guides(fill=FALSE)+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.7)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.7)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
+  suppressWarnings(print(p))
+}
+
+medianNaiveRUV2 <- function(nu, Y, cIdx, k){
+  nY <- naiveRandRUV(Y, cIdx, nu, k)
+  #Median summarize the normalized values
+  #melt matrix to have ECMp and Ligand columns
+  nYm <- melt(nY, varnames=c("BWL","SE"))
+  #Recreate a MEP column
+  nYm$ECMp <- sub("([[:alnum:]]*_){1}","",nYm$SE)
+  nYm$Ligand <- sub("([[:alnum:]]*_){2}","",nYm$BWL)
+  nYm$MEP <- paste(nYm$ECMp,nYm$Ligand, sep="_")
+  #Median summarize by MEP
+  nYm <- data.table(nYm)
+  nYm <- nYm[, BWL := NULL]
+  nYm <- nYm[, SE := NULL]
+  nYm <- nYm[,list(Value = median(value)), by="MEP,ECMp,Ligand"]
+  return(nYm)
+}
+
+madNaiveRUV2 <- function(nu, Y, cIdx, k){
+  nY <- naiveRandRUV(Y, cIdx, nu, k)
+  #MAD summarize the normalized values
+  #melt matrix to have ECMp and Ligand columns
+  nYm <- melt(nY, varnames=c("BWL","SE"))
+  #Recreate a MEP column
+  nYm$ECMp <- sub("([[:alnum:]]*_){1}","",nYm$SE)
+  nYm$Ligand <- sub("([[:alnum:]]*_){2}","",nYm$BWL)
+  nYm$MEP <- paste(nYm$ECMp,nYm$Ligand, sep="_")
+  #Median summarize by MEP
+  nYm <- data.table(nYm)
+  nYm <- nYm[, BWL := NULL]
+  nYm <- nYm[, SE := NULL]
+  nYm <- nYm[,list(Value = mad(value)), by="MEP,ECMp,Ligand"]
+  return(nYm)
+}
+
+addMarginValues <- function(dt, mValue, Mvalue){
+    dt.l <- dt[,list(m.l = median(get(mValue), na.rm = TRUE),
+                           M.l = median(get(MValue), na.rm= TRUE)),
+                     by="Ligand"]
+  
+    dte. <- dt[,list(me. = median(get(mValue), na.rm = TRUE),
+                           Me. = median(get(MValue), na.rm= TRUE)),
+                     by="ECMp"]
+  
+  setkey(dt,Ligand)
+  setkey(dt.l,Ligand)
+  dtm <- merge(dt,dt.l)
+  
+  setkey(dtm,ECMp)
+  setkey(dte.,ECMp)
+ dtmm <- merge(dtm, dte.) 
+  return(dtmm)
+}
+
+source("MEPLINCSFunctions.R")
+supportingPlots = FALSE
+runRUV2S = TRUE
+
+#Set the staining set to be analyzed (SS1|SS2|SS3)
+ss <- switch(s,EdU="SS2",Lineage="SS3")
+
+```
+
+
+
+```{r setup}
+library("ggplot2")
+library("reshape2")
+library("data.table")
+library("limma")
+library("MEMA")
+library("grid")
+library("knitr")
+library("gplots")
+library("RColorBrewer")
+library("RUVnormalize")
+
+#Setup colors for Barcode and text in all heatmaps
+selDark2 <- colorRampPalette(brewer.pal(8,"Dark2"))
+plateCol = selDark2(8)
+
+l1 <- fread(paste0("./",cellLine,"/",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level1.txt"), showProgress = FALSE)
+
+#Keep the control wells separate
+l1$Ligand[l1$Ligand=="FBS"] <- paste(l1$Ligand[l1$Ligand=="FBS"],"C",as.numeric(factor(l1$Barcode[l1$Ligand=="FBS"])),sep="")
+l1$MEP <- paste(l1$ECMp,l1$Ligand,sep="_")
+setkey(l1, "ECMp")
+l1 <- l1[!"fiducial"]
+l1 <- l1[!"blank"]
+
+#Logit transform DNA2NProportion
+#logit(p) = log[p/(1-p)]
+DNA2NImpute <- l1$Nuclei_PA_Cycle_DNA2NProportion
+DNA2NImpute[DNA2NImpute==0] <- .01
+DNA2NImpute[DNA2NImpute==1] <- .99
+l1$Nuclei_PA_Cycle_DNA2NProportionLogit <- log2(DNA2NImpute/(1-DNA2NImpute))
+
+#Create spot level dataset
+l3 <- l1[,list(Ligand=unique(Ligand), LigandAnnotID=unique(LigandAnnotID),
+               ECMp=unique(ECMp), ECMpAnnotID=unique(ECMpAnnotID),
+               MEP=unique(MEP),
+               Row=unique(Row), Column = unique(Column), Block=unique(Block), ID=unique(ID),
+               ArrayRow=unique(ArrayRow), ArrayColumn=unique(ArrayColumn),
+               EdUmel = median(Nuclei_PA_Gated_EduPositiveLogit, na.rm=TRUE),
+               DNA2Nmel = median(Nuclei_PA_Cycle_DNA2NProportionLogit, na.rm=TRUE),
+               SCCmel = as.numeric(median(Spot_PA_SpotCellCount, na.rm=TRUE))),
+         by="Barcode,Well,Spot"]
+
+
+l1MEPs <- l1[,list(mel = median(Nuclei_PA_Gated_EduPositiveLogit, na.rm = TRUE),
+                   Mel = mad(Nuclei_PA_Gated_EduPositiveLogit, na.rm= TRUE)),
+             by="Barcode,Well,Ligand,ECMp,MEP"]
+l1MEPs <- addMarginValues(l1MEPs,"mel","Mel")
+
+m.. <- median(l1MEPs$mel, na.rm = TRUE)
+M.. <- median(l1MEPs$Mel, na.rm = TRUE)
+```
+
+```{r RUV2+Shrinkage, eval=runRUV2S}
+#Unit of study is array so there are 64 'samples' with 8 replicates
+#Order the spot level data by plate, well, spot number
+#Create a spot assignment that works with rotated B row arrays
+l3$RSpot <- l3$Spot
+l3$RSpot[grepl("B",l3$Well)] <- 701-l3$RSpot[grepl("B",l3$Well)]
+#Add in ligand and ECMp names so they will carry through the normalization
+l3$BWL <- paste(l3$Barcode,l3$Well,l3$Ligand,sep="_")
+l3$SE <- paste(l3$RSpot,l3$ECMp,sep="_")
+#Cast to get mel values by barcode_well rows and spot columns
+#Coerce missing values to have near 0 proliferation signals
+l3c <- dcast(l3, BWL~SE, value.var="EdUmel",fill = log2(.01/(1-.01)))
+#Remove the BWL column and use it as rownames in the matrix
+l3m <- l3c[,grep("BWL",colnames(l3c), value=TRUE, invert=TRUE)]
+
+Y <- matrix(unlist(l3m), nrow=nrow(l3m), dimnames=list(l3c$BWL, colnames(l3m)))
+
+
+```
+---
+title: "MEP-LINCS `r cellLine` `r ss` `r s` Quality Analysis"
+date: "`r Sys.Date()`"
+---
+
+###Proliferation Signal
+This analysis starts with a focus on the proportion of EdU positive cells at each spot.
+For each plate, k-means clustering (k = 2) is used on the raw EdU median intensity values of the cells in the control well. Cells in the higher-value cluster are labeled as EdU+.  
+The intensity value dividing the control well clusters is used as a threshold to label the cells in the other 7 ligand wells of the plate.  
+The proportion of EdU+ cells at each spot is calculated.  
+The proportion is transformed by the logit function defined as logit(p) = log2(p/1-p) which takes on values from negative to positive infinity. The proportion values in this dataset have been transformed into the range [.01, .99] to eliminate issues with infinite values.
+
+
+```{r, eval=TRUE, fig.width=9, fig.height=6}
+
+
+titleExpression <- expression(EdU^{"+"}~ Medians~(m["e,l"]))
+plotLEHmap(l1MEPs, fill="mel", titleExpression)
+
+titleExpression <- expression(EdU^{"+"}~MADs~(M["e,l"]))
+plotLEHmap(l1MEPs, fill="Mel", titleExpression)
+
+
+```
+
+
+```{r, eval=TRUE, fig.width=9, fig.height=6}
+k <- nrow(Y)
+cIdx <- 1:ncol(Y)
+
+for(nu in c(1e-2, 1, 10)){
+  titleExpression <- bquote(EdU^{"+"}~ Medians~(m["e,l"])~RUV~with~nu~"=" ~.(nu)*","~k~"="~.(k))
+  nY <- medianNaiveRUV2(nu, Y, cIdx, k)
+  plotLEHmap(dt=nY, fill="Value", titleExpression)
+}
+
+for(nu in c(1e-2, 1, 10)){
+  titleExpression <- bquote(EdU^{"+"}~ MADs~(M["e,l"])~RUV~with~nu~"=" ~.(nu)*","~k~"="~.(k))
+  nsY <- madNaiveRUV2(nu, Y, cIdx, k)
+  plotLEHmap(dt=nsY, fill="Value", titleExpression)
+}
+
+```
+
+```{r AddMarginValues}
+
+
+```  
+
+###Centered Medians by ECM Protein
+Each boxplot below has 64 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ECMp with each of the 64 ligands and then subtracting the median of pairing all ECM proteins with each ligand.
+
+
+```{r, fig.height=4}
+p <- ggplot(l1MEPs,aes(x=ECMp, y=mel-m.l))+
+  geom_boxplot()+ 
+  ggtitle(expression(EdU^{"+"}~Centered~Medians~by~ECMp~(m["e,l"]*"-"*m[".,l"])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(1)))
+suppressWarnings(print(p))
+
+```
+
+###Centered Medians by Ligand
+Each boxplot below has 46 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ligand with each of the 46 ECM proteins and then subtracting the the median of pairing all ligands with each ECM protein.
+
+```{r, fig.height=4}
+
+p <- ggplot(l1MEPs,aes(x=Ligand, y=mel-me.))+
+  geom_boxplot()+ ggtitle(expression(EdU^{"+"}~Centered~ Medians~by~Ligand~(m["e,l"]*"-"*m["e,."])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+
+
+p <- ggplot(l1MEPs,aes(x=Barcode, y=mel-me., colour=Well))+
+  geom_boxplot()+ ggtitle(expression(EdU^{"+"}~Centered~ Medians~by~Ligand~(m["e,l"]*"-"*m["e,."])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+
+```
+
+
+###Centered MADs
+The MADs are centered in the same manner as the medians.  
+
+```{r, fig.height=4}
+
+p <- ggplot(l1MEPs,aes(x=ECMp, y=Mel-M.l))+
+  geom_boxplot()+ 
+  ggtitle(expression(EdU^{"+"}~Centered~MADs~by~ECMp~(M["e,l"]*"-"*M[".,l"])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+
+p <- ggplot(l1MEPs,aes(x=Ligand, y=Mel-Me.))+
+  geom_boxplot()+ ggtitle(expression(EdU^{"+"}~Centered~MADs~by~Ligand~(M["e,l"]*"-"*M["e,."])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+
+p <- ggplot(l1MEPs,aes(x=Barcode, y=Mel-Me.,colour=Well))+
+  geom_boxplot()+ ggtitle(expression(EdU^{"+"}~Centered~MADs~by~Ligand~(M["e,l"]*"-"*M["e,."])))+
+  xlab("")+ylab("")+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+
+```
+
