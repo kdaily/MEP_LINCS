@@ -19,7 +19,7 @@ plotLEHmap <- function(dt, fill, titleExpression){
     ggtitle(titleExpression)+
     xlab("")+ylab("")+
     guides(fill=FALSE)+
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(1)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.7)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.7)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.5)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.7)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
   suppressWarnings(print(p))
 }
 
@@ -188,7 +188,7 @@ The proportion of EdU+ cells at each spot is calculated.
 The proportion is transformed by the logit function defined as logit(p) = log2(p/1-p) which takes on values from negative to positive infinity. The proportion values in this dataset have been transformed into the range [.01, .99] to eliminate issues with infinite values.
 
 
-```{r, eval=TRUE, fig.width=9, fig.height=6}
+```{r, eval=TRUE, fig.width=4.5, fig.height=4}
 
 
 titleExpression <- expression(EdU^{"+"}~ Medians~(m["e,l"]))
@@ -200,91 +200,9 @@ plotLEHmap(l1MEPs, fill="Mel", titleExpression)
 
 ```
 
-###Centered Medians by ECM Protein
-Each boxplot below has 64 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ECMp with each of the 64 ligands and then subtracting the median of pairing all ECM proteins with each ligand.
-
-
-```{r, fig.height=4, eval=FALSE}
-
-plotCenteredBoxes(dt=l1MEPs, value="mel-m.l", groupBy="ECMp",
-                  titleExpression=expression(EdU^{"+"}~Centered~Medians~by~ECMp~(m["e,l"]*"-"*m[".,l"])))
-
-```
-
-###Centered Medians by Ligand
-Each boxplot below has 46 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ligand with each of the 46 ECM proteins and then subtracting the the median of pairing all ligands with each ECM protein.
-
-```{r, fig.height=4, eval=FALSE}
-
-groupBy <- "Ligand"
-value <- "mel-me."
-titleExpression <- expression(EdU^{"+"}~Centered~Medians~by~Ligand~(m["e,l"]*"-"*m["e,."]))
-plotCenteredBoxes(dt=l1MEPs, value=value, groupBy=groupBy, titleExpression=titleExpression)
-
-plotCenteredBoxes(dt=l1MEPs, value="mel-me.", groupBy="Barcode", colourBy="Well", titleExpression=expression(EdU^{"+"}~Centered~Medians~by~Ligand~(m["e,l"]*"-"*m["e,."])))
-
-```
-
-
-###Centered MADs
-The MADs are centered in the same manner as the medians.  
-
-```{r, fig.height=4, eval=FALSE}
-
-plotCenteredBoxes(l1MEPs, value="Mel-M.l", groupBy="ECMp",
-                  titleExpression=expression(EdU^{"+"}~Centered~MADs~by~ECMp~(M["e,l"]*"-"*M[".,l"])))
-
-plotCenteredBoxes(l1MEPs, value="Mel-Me.", groupBy="Ligand",
-                  titleExpression=expression(EdU^{"+"}~Centered~MADs~by~Ligand~(M["e,l"]*"-"*M["e,."])))
-
-plotCenteredBoxes(l1MEPs, value="Mel-Me.", groupBy="Barcode", colour="Well",
-                  titleExpression=expression(EdU^{"+"}~Centered~MADs~by~Ligand~(M["e,l"]*"-"*M["e,."])))
-
-```
-
-
-```{r, eval=TRUE, fig.width=9, fig.height=6, eval=FALSE}
-k <- nrow(YEdU)
-cIdx <- 1:ncol(YEdU)
-
-for(nu in c(1e-3, 1e-2, 1e-1, 1)){
-  nYEdUm <- medianNaiveRUV2(nu, YEdU, cIdx, k)
-  setnames(nYEdUm, "Value", "mel")
-  
-  nYEdUM <- madNaiveRUV2(nu, YEdU, cIdx, k)
-  setnames(nYEdUM, "Value", "Mel")
-  setkey(nYEdUm,MEP,ECMp,Ligand)
-  setkey(nYEdUM, MEP,ECMp,Ligand)
-  nYEdU <- merge(nYEdUm, nYEdUM)
-  
-  #Add margin values
-  nYEdU <- addMarginValues(dt=nYEdU, mValue="mel",MValue="Mel")
-  
-  plotLEHmap(dt=nYEdU, fill="mel",
-             titleExpression=bquote(EdU^{"+"}~ Medians~(m["e,l"])~RUV~with~nu~"=" ~.(nu)*","~k~"="~.(k)))
-  
-  plotLEHmap(dt=nYEdU, fill="Mel",
-             titleExpression=bquote(EdU^{"+"}~ MADs~(m["e,l"])~RUV~with~nu~"=" ~.(nu)*","~k~"="~.(k)))
-  
-  plotCenteredBoxes(dt=nYEdU, value="mel-m.l", groupBy="ECMp",
-                    titleExpression=expression(EdU^{"+"}~Centered~Medians~by~ECMp~(m["e,l"]*"-"*m[".,l"])))
-  
-  plotCenteredBoxes(dt=nYEdU, value="mel-me.", groupBy="Ligand",
-                    titleExpression=expression(EdU^{"+"}~Centered~Medians~by~Ligand~(m["e,l"]*"-"*m["e,."])))
-  
-  plotCenteredBoxes(dt=nYEdU, value="Mel-M.l", groupBy="ECMp",
-                    titleExpression=expression(EdU^{"+"}~Centered~MADs~by~ECMp~(M["e,l"]*"-"*M[".,l"])))
-  
-  plotCenteredBoxes(dt=nYEdU, value="Mel-Me.", groupBy="Ligand",
-                    titleExpression=expression(EdU^{"+"}~Centered~MADs~by~Ligand~(M["e,l"]*"-"*M["e,."])))
-  ##Todo: bring Barcode and well along with MEP, etc.
-  # plotCenteredBoxes(dt=nYEdU, value="mel-me.", groupBy="Barcode", colourBy="Well", titleExpression=expression(EdU^{"+"}~Centered~Medians~by~Ligand~(m["e,l"]*"-"*m["e,."])))
-}
-```
-
 ```{r}
 
-nYEdUList <- lapply(c(5,10,20, 40), function(k, YEdU, cIdx, mValue, MValue){
+nYEdUList <- lapply(c(2,5,10,20, 40), function(k, YEdU, cIdx, mValue, MValue){
   nuYEdUList <- lapply(c(1e-3, 1e-2, 1e-1), function(nu, k, YEdU, cIdx, mValue, MValue){
     nYEdUm <- medianNaiveRUV2(nu, YEdU, cIdx, k)
     setnames(nYEdUm, "Value", "mel")
@@ -303,6 +221,37 @@ nYEdUList <- lapply(c(5,10,20, 40), function(k, YEdU, cIdx, mValue, MValue){
 }, YEdU=YEdU, cIdx=1:ncol(YEdU), mValue="mel", MValue="Mel")
 nYEdUkn <- rbindlist(nYEdUList)
 
+```
+
+```{r, fig.width=4.5, fig.height=3}
+groupBy <- "ECMp"
+value <- "mel-m.l"
+colourBy <- "Barcode"
+titleExpression=expression(EdU^{"+"}~Centered~Medians~by~ECMp~(m["e,l"]*"-"*m[".,l"]))
+p <- ggplot(l1MEPs, aes_string(x=groupBy, y=value))+
+  geom_boxplot()+ 
+  ggtitle(titleExpression)+
+  xlab("")+ylab("")+
+  ylim(-6,4)+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(.5)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))
+suppressWarnings(print(p))
+```
+
+```{r}
+
+dt <- nYEdUkn
+p <- ggplot(dt,aes_string(x=groupBy, y=value))+
+  geom_boxplot()+ 
+  ggtitle(bquote(EdU^{"+"}~ Medians~(m["e,l"]*"-"*m[".,l"])~After~NaiveRUV2))+
+  xlab("")+ylab("")+
+  ylim(-6,4)+
+  guides(fill=FALSE)+
+  theme_grey(base_size = 12, base_family = "")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))+
+  facet_grid(k~nu, labeller = labeller(nu = label_both, k = label_both))
+suppressWarnings(print(p))
 ```
 
 ```{r, fig.width=4.5, fig.height=3}
@@ -326,12 +275,43 @@ suppressWarnings(print(p))
 dt <- nYEdUkn
 p <- ggplot(dt,aes_string(x=groupBy, y=value, colour=colourBy))+
   geom_boxplot()+ 
-  ggtitle(bquote(EdU^{"+"}~ Medians~(m["e,l"]*"-"*m["e,."])~After~NaiveRUV2))+
+  ggtitle(bquote(EdU^{"+"}~ Medians~(m["e,l"]*"-"*m["e.,."])~After~NaiveRUV2))+
   xlab("")+ylab("")+
   ylim(-6,4)+
   guides(fill=FALSE)+
   theme_grey(base_size = 12, base_family = "")+
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(1)))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.5)))+
   facet_grid(k~nu, labeller = labeller(nu = label_both, k = label_both))
 suppressWarnings(print(p))
+```
+
+
+```{r, fig.width=4.5, fig.height=3}
+
+fill <- "mel"
+titleExpression <- expression(EdU^{"+"}~ Medians~(m["e,l"]))
+dt <- l1MEPs
+limits <- quantile(dt[[fill]], probs=c(.01, .99))
+                 
+p <- ggplot(dt, aes_string(x="Ligand", y="ECMp", fill = fill))+
+  geom_tile()+
+  scale_fill_gradient(low="white",high="red",oob = scales::squish,limits=quantile(dt[[fill]], probs=c(.01, .99)))+
+  ggtitle(titleExpression)+
+  xlab("")+ylab("")+
+  #guides(fill=FALSE)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.5)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.3)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
+suppressWarnings(print(p))
+```
+
+```{r}
+dt <- nYEdUkn
+
+p <- ggplot(dt, aes_string(x="Ligand", y="ECMp", fill = fill))+
+  geom_tile()+
+  scale_fill_gradient(low="white",high="red",oob = scales::squish, limits=quantile(dt[[fill]], probs=c(.01, .99)))+
+  #guides(fill=FALSE)+
+  facet_grid(k~nu, labeller = labeller(nu = label_both, k = label_both))+
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.6)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.5)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.3)),panel.grid.major = element_line(linetype = 'blank'),panel.background = element_rect(fill = "dimgray"))
+suppressWarnings(print(p))
+
 ```
