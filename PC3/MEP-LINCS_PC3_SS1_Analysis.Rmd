@@ -605,10 +605,4 @@ Cell Cycle plots include univariate plots of the total DAPI signal.
 
 plotTotalDAPI(l1, barcodes)
 
-if (ss == "SS1"){
-  
-  
-} else if (ss == "SS2"){
-  
-} 
 ```

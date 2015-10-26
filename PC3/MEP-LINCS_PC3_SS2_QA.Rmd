@@ -11,7 +11,8 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 ```{r, echo=FALSE}
 #Author: Mark Dane, copyright 2015
 
-source("../MEPLINCSFunctions.R")
+source("MEPLINCSFunctions.R")
+supportingPlots = FALSE
 
 #Set the staining set to be analyzed (SS1|SS2|SS3)
 ss <- "SS2"
@@ -29,16 +30,14 @@ library("grid")
 library(knitr)
 library("gplots")
 library("RColorBrewer")
+library("RUVnormalize")
 
 
 #Setup colors for Barcode and text in all heatmaps
 selDark2 <- colorRampPalette(brewer.pal(8,"Dark2"))
 plateCol = selDark2(8)
 
-l1 <- fread(paste0("./",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level1.txt"), showProgress = FALSE)
-l2 <- fread(paste0("./",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level2.txt"), showProgress = FALSE)
-l3 <- fread(paste0("./",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level3.txt"), showProgress = FALSE)
-l4 <- fread(paste0("./",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level4.txt"), showProgress = FALSE)
+l1 <- fread(paste0("./",cellLine,"/",ss,"/AnnotatedData/",cellLine,"_",ss,"_Level1.txt"), showProgress = FALSE)
 
 #Keep the control wells separate
 l1$Ligand[l1$Ligand=="FBS"] <- paste(l1$Ligand[l1$Ligand=="FBS"],"C",as.numeric(factor(l1$Barcode[l1$Ligand=="FBS"])),sep="")
@@ -268,7 +267,7 @@ print(p)
 Each boxplot below has 64 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ECMp with each of the 64 ligands.
 
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 p <- ggplot(l1MEPs,aes(x=ECMp, y=mel))+
   geom_boxplot()+ 
   ggtitle(expression(EdU^{"+"}~ Medians~by~ECMp~(m["e,l"])))+
@@ -284,7 +283,7 @@ suppressWarnings(print(p))
 Each boxplot below has 46 logit-transformed EdU+ proportion values that are the medians from the replicates of pairing one ligand with each of the 46 ECM proteins.
 
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 
 p <- ggplot(l1MEPs,aes(x=Ligand, y=mel))+
   geom_boxplot()+ 
@@ -304,7 +303,7 @@ Median median m(.,l) of ligand columns is `r sprintf( "%.2f",median(l1MEPs$m.l))
 Median median m(e,.) of ECMp rows is `r sprintf( "%.2f", median(l1MEPs$me.))`
 The median median (m.,.) of all ECMp and ligand pairings is `r sprintf( "%.2f", median(l1MEPs$mel))`.
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 
 
 p <- ggplot(l1MEPs,aes(x=Ligand, y=m.l))+
@@ -335,7 +334,7 @@ suppressWarnings(print(p))
 Each boxplot below has 64 logit-transformed EdU+ proportion values that are the MADs from the replicates of pairing one ECMp with each of the 64 ligands.
 
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 p <- ggplot(l1MEPs,aes(x=ECMp, y=Mel))+
   geom_boxplot()+ 
   ggtitle(expression(EdU^{"+"}~MADs~by~ECMp~(M["e,l"])))+
@@ -351,7 +350,7 @@ suppressWarnings(print(p))
 Each boxplot below has 46 logit-transformed EdU+ proportion values that are the MADs from the replicates of pairing one ligand with each of the 46 ECM proteins.
 
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 p <- ggplot(l1MEPs,aes(x=Ligand, y=Mel))+
   geom_boxplot()+ 
   ggtitle(expression(EdU^{"+"}~ MADs~by~Ligand~(M["e,l"])))+
@@ -371,7 +370,7 @@ Median MAD M(.,l) of ligand columns is `r sprintf( "%.2f", median(l1MEPs$M.l))`
 Median MAD M(e,.) of ECMp rows is `r sprintf( "%.2f", median(l1MEPs$Me.))`  
 Median MAD (M.,.) of all ECMp and ligand pairings is `r sprintf( "%.2f", median(l1MEPs$Mel))`.  
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 
 
 p <- ggplot(l1MEPs,aes(x=Ligand, y=M.l))+
@@ -399,7 +398,7 @@ suppressWarnings(print(p))
 
 
 
-```{r, eval=FALSE}
+```{r, eval=supportingPlots}
 #####recheck below as there may be a fault in the logic of method
 lMEPs<- lMEPs[,mep := median(mel), by="Barcode,ECMp"]
 lMEPs <- lMEPs[,melmepAbsDiff := abs(mel-mep), by="Barcode,ECMp"]
@@ -419,7 +418,7 @@ MEPECMp <- merge(MEPECMp,lMEPECMp)
 ```
 
 
-```{r, fig.width=4.5, fig.height=5, eval = FALSE}
+```{r, fig.width=4.5, fig.height=5, eval=supportingPlots}
 p <- ggplot(MEPECMp, aes(x=melECMpPlateAbsDiffMAD, y=MADMedian))+
   xlab(expression(Median~MAD~of~Absolute~Differences~of~Ligand~medians~of~EdU^{"+"}~by~ECMp~(W["e"])))+
   ylab(expression(Median~MAD~of~Control~medians~of~EdU^{"+"}~by~ECMp~(C["e"])))+
@@ -455,7 +454,7 @@ suppressWarnings(print(p))
 
 ###Tests for Control Means as Null Means with Logit
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 
 p <- ggplot(cMEPECMp, aes(x=ECMp, y=ce))+
   geom_point(colour="blue")+
@@ -484,7 +483,7 @@ suppressWarnings(print(p))
 
 ###Tests for Control Means as Null Means with Positive Proportion
 
-```{r, fig.height=4}
+```{r, fig.height=4, eval=supportingPlots}
 
 p <- ggplot(cMEPECMp, aes(x=ECMp, y=cePP))+
   geom_point(colour="blue")+

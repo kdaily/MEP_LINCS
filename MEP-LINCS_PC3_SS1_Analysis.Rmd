@@ -14,9 +14,9 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8,
 source("../MEPLINCSFunctions.R")
 
 #Set the staining set to be analyzed (SS1|SS2|SS3)
-ss <- "SS1"
+#ss <- "SS1"
 #Set the cell line to be analyzed (PC3|MCF7|YAPC)
-cellLine <- "MCF7"
+#cellLine <- "MCF7"
 ```
 
 
