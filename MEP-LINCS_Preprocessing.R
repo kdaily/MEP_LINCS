@@ -393,6 +393,6 @@ preprocessMEPLINCS <- function(ss, cellLine, limitBarcodes=8, writeFiles= TRUE){
 }
 
 cDir <- getwd()
-setwd("../MEP-LINCS/")
-preprocessMEPLINCS(ss="SS1",cellLine="MCF7",limitBarcodes = 8, writeFiles = TRUE)
+setwd("../GrantData/")
+preprocessMEPLINCS(ss="SS3",cellLine="HCC1143",limitBarcodes = 1, writeFiles = TRUE)
 setwd(cDir)

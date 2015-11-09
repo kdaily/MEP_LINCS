@@ -58,12 +58,12 @@ HFRepThresh <- 3
 ####date: `r Sys.Date()`
 
 ##Summary
-The MEP-LINCS `r cellLine` `r ss` datasets include four levels of high content imaging data from on Microenvironment Microarrays (MEMAs). After QA filtering, there are `r nrow(l4)` Microenvironment Perturbations (MEPs) that are pairwise combinations of `r length(unique(l4$ECMpAnnotID))` printed ECM proteins and `r length(unique(l4$LigandAnnotID))-1` ligands or growth factors.  
+The MEP-LINCS `r cellLine` `r ss` dataset includes four levels of high content imaging data from  Microenvironment Microarrays (MEMAs) experiments. After QA filtering, there are `r nrow(l4)` Microenvironment Perturbations (MEPs) that are pairwise combinations of `r length(unique(l4$ECMpAnnotID))` printed ECM proteins and `r length(unique(l4$LigandAnnotID))-1` ligands or growth factors.  
 
 ##Introduction
-The LINCS Pilot `r cellLine` `r ss` experiment was performed with cells grown in eight 8-well plates. The `r ss` staining set includes, DAPI, `r unique(l4$Endpoint488)` (488nm), `r unique(l4$Endpoint555)` (555nm) and `r unique(l4$Endpoint647)` (647nm). Four color images of the cells at each spot were gathered on a Nikon automated microscope. All data for this staining set comes from the nuclei as defined by the DAPI staining.
+The LINCS Pilot `r cellLine` `r ss` experiment was performed with cells grown in 8-well plates. The `r ss` staining set includes, DAPI, `r unique(l4$Endpoint488)` (488nm), `r unique(l4$Endpoint555)` (555nm) and `r unique(l4$Endpoint647)` (647nm). Four color images of the cells at each spot were gathered on a Nikon automated microscope.
 
-Intensity, position and a limited set of morphology data are gatherd for each cell, merged with the experiment metadata, normalized, filtered and summarized. The dataset is organized into the four LINCS imaging categories as follows:
+Intensity, position and a limited set of morphology data are gathered for each cell, merged with the experiment metadata, normalized, filtered and summarized. The dataset is organized into the four LINCS imaging categories as follows:
 
 Level 1 - Raw data  
 Level 2 - Normalized data  
@@ -90,7 +90,7 @@ for (barcode in barcodes){
   
   p <- ggplot(dt, aes(x=Spot_PA_SpotCellCount))+
     geom_histogram(binwidth = 1)+
-    xlim(0,40)+ylim(0,140)+
+    xlim(0,50)+ylim(0,140)+
     ggtitle(paste("\n\n Spot Cell Count in",unique(dt$CellLine), "cells in plate",unique(dt$Barcode)))+
     xlab("Spot Cell Count")+
     theme(axis.text.x = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(.8)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(.5)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.3)))+
@@ -148,7 +148,8 @@ Feature values for all cells in a plate were normalized by subtracting the plate
 
 
 ##Spot Cell Count Analysis
-The spot cell count analysis uses robust Z scores to identify MEPs with extreme population sizes. The normalized spot cell counts are summarized by the median of their replicates. The median and mad of the distribution of normalized and summarized values are used to convert to robust Z scores and are shown below. Below the distribution plot are plots with Z scores stratified by ligand and ECM protein. A listing of the MEPs in the tails of the distribution is below.
+The spot cell count analysis uses robust Z scores to identify MEPs with extreme population sizes. The normalized spot cell counts are summarized by the median of their replicates. The median and mad of the distribution of normalized and summarized values are used to convert to robust Z scores and are shown below. Below the distribution plot are plots with Z scores stratified by ligand and ECM protein. A listing of the MEPs in the tails of the distribution is below.  
+
 
 ```{r SCCRobustZScores, echo=FALSE, fig.width=8, fig.height=3.5, eval=TRUE}
 
@@ -178,15 +179,10 @@ suppressWarnings(print(p))
 
 \newpage
 
-
-
-\newpage
-
-
 ##Filtering
 A highly filtered dataset termed "HF" is created as follows. Spots with less than `r HFSCCThresh` cells, wells with QA scores below `r wellQAThresh `, wells with low quality DAPI, MEPS with less than `r HFRepThresh` replicates and the FBS control wells are removed from further analysis of the dataset. After filtering there are `r length(unique(l4HF$MEP))` unique MEPs in the HF dataset. 
 
-Each spot represents a MEP that is a pairwise combination of the ECM protein printed at a  spot and the ligand in the solution of the well. The number of replicate MEPs after removing low-quality wells are shown in the supplemental material.
+Each spot represents a MEP that is a pairwise combination of the ECM protein printed at a spot and the ligand in the solution of the well. The number of replicate MEPs after removing low-quality wells are shown in the supplemental material.
 
 ```{r, child='MEP-LINCS_ProliferationText.Rmd', eval=ss=="SS2"}
 ```
@@ -283,6 +279,25 @@ suppressWarnings(print(p))
 
 ```
 
+```{r LineageRatioofCOL1ByLigand, eval=ss=="SS3"}
+p <- ggplot(l3[l3$ECMp=="COL1"], aes(x = reorder(Ligand, Cytoplasm_PA_Intensity_LineageRatio_RZSNorm, FUN=median), y = Cytoplasm_PA_Intensity_LineageRatio_RZSNorm, colour = Barcode))+geom_boxplot()+
+  ggtitle(paste("\n\nLineage Ratio of Collagen 1 by Ligand in the Normalized, Unfiltered Dataset "))+
+  xlab("")+ylab("")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.8)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.3)))
+suppressWarnings(print(p))
+
+```
+
+```{r LineageRatioofCOL1ByLigandHF, eval=ss=="SS3"}
+p <- ggplot(l3HF[l3HF$ECMp=="COL1"], aes(x = reorder(Ligand, Cytoplasm_PA_Intensity_LineageRatio_RZSNorm, FUN=median), y = Cytoplasm_PA_Intensity_LineageRatio_RZSNorm, colour = Barcode))+geom_boxplot()+
+  ggtitle(paste("\n\nLineage Ratio of Collagen 1 by Ligand in the Normalized, Heavily Filtered Dataset"))+
+  xlab("")+ylab("")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size=rel(.8)), axis.text.y = element_text(angle = 0, vjust = 0.5, hjust=1, size=rel(1)), plot.title = element_text(size = rel(1)),legend.text=element_text(size = rel(.3)),legend.title=element_text(size = rel(.3)))
+suppressWarnings(print(p))
+
+```
+
+
 ```{r lineageRatioByECMp, eval=ss=="SS3"}
 
 p <- ggplot(dt, aes(x = reorder(ECMpAnnotID, Cytoplasm_PA_Intensity_LineageRatio_RZSNorm, FUN=median), y = Cytoplasm_PA_Intensity_LineageRatio_RZSNorm))+geom_boxplot()+
@@ -326,7 +341,7 @@ Select a curated feature vector of MEP intensities and morphologies
 Calculate the euclidean distance of each MEP's feature vector to the control feature vector  
 Perform hierarchical clustering on the MEPs 
 
-The following heatmap shows the normalized MEP responses based on the curated feature vector normalized dataset without NID1 (an outlier ECM protein). The row color bars and text colors identify the 8 different experiment plates and help show plate batch effects.
+The following heatmap shows the normalized MEP responses based on the curated feature vector normalized dataset without NID1 (an outlier ECM protein). The row color bars and text colors identify the different experiment plates and help show plate batch effects.
 
 ```{r, fig.height=16}
 
@@ -522,7 +537,7 @@ The loess model of a MEMA is the mean value of a weighted version of each spot's
 
 A MEMA's QA score is derived from the loess model of the control-well-normalized values by calculating the proportion of spots in low signal regions(LSR). A threshold for classifying spots as LSR is based on the median of each plate's control well. To have higher scores reflect increasing quality, the MEMA QA score is defined as the proportion of non-LSR spots to total spots. This value will be 1 for MEMAs with no low signal regions and approach 0 as the number of LSR spots increases.
 
-Below are plots showing data from well B01 from plate LI8X00110 from LINCS staining set 2. The LSR spots are those to the left of the blue vertical line at the threshold value of `r lthresh ` in the histogram. 
+Below are plots showing data from well A01 from plate `r barcodes[1]`. The LSR spots are those to the left of the blue vertical line at the threshold value of `r lthresh ` in the histogram. 
 
 
 ```{r Loess_Model_explanation , echo=FALSE, fig.width=2.5,fig.height=4}
