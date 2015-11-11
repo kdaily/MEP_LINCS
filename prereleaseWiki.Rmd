@@ -20,7 +20,6 @@ library(stringr)
 library(tidyr)
 library(reshape2)
 library(knitr)
-library(DT)
 library(synapseClient)
 synapseLogin()
 
@@ -65,6 +64,6 @@ rawFilesTbl <- dcast(rawFiles,
 ```
 
 ```{r rawdatatable}
-datatable(rawFilesTbl)
+kable(rawFilesTbl)
 ```
 
