@@ -3,7 +3,7 @@ library(synapseClient)
 synapseLogin()
 
 knit2synapse::knitToFolderEntity(file='./prereleaseWiki.Rmd', parentId = "syn2862345",
-                                 folderName = "Pre-release", overwrite=TRUE)
+                                 folderName = "Pre-release")
 ```
 
 ```{r setup, include=FALSE}
