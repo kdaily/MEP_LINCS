@@ -8,8 +8,7 @@ thisRepo <- getRepo('kdaily/MEP_LINCS',
 thisScript <- getPermlink(thisRepo, 'prereleaseWiki.Rmd')
 
 knit2synapse::knitToFolderEntity(file='./prereleaseWiki.Rmd', parentId = "syn2862345",
-                                 folderName = "Pre-release", overwrite=TRUE,
-                                 executed=thisScript)
+                                 folderName = "Pre-release", overwrite=TRUE)
 ```
 
 ```{r setup, include=FALSE}
