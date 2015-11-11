@@ -1,11 +1,6 @@
 ```{r knit2synapse, include=FALSE, eval=FALSE}
-library(rGithubClient)
 library(synapseClient)
 synapseLogin()
-
-thisRepo <- getRepo('kdaily/MEP_LINCS',
-                    ref='branch', refName='prereleasewiki')
-thisScript <- getPermlink(thisRepo, 'prereleaseWiki.Rmd')
 
 knit2synapse::knitToFolderEntity(file='./prereleaseWiki.Rmd', parentId = "syn2862345",
                                  folderName = "Pre-release", overwrite=TRUE)
