@@ -5,8 +5,8 @@ synapseLogin()
 knit2synapse::knitToFolderEntity(file='./prereleaseWiki.Rmd', parentId = "syn2862345",
                                  folderName = "Pre-release")
 ```
-
 ```{r setup, include=FALSE}
+library(DT)
 library(plyr)
 library(dplyr)
 library(data.table)
@@ -21,43 +21,41 @@ set.seed(4)
 
 knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
 
-```
-## Annotated Data
-```{r annotatedfilesquery}
-annotatedFolder <- "syn5004301"
-query <- sprintf('select id,name,level,CellLine,StainingSet from file where parentId=="%s"', 
-                 annotatedFolder)
-annotFiles <- synQuery(query)
-
-colnames(annotFiles) <- gsub(".*\\.", "", colnames(annotFiles))
-
-paramFiles <- annotFiles %>% filter(level == "PipelineParameters")
-annotFiles <- annotFiles %>% filter(level != "PipelineParameters")
+manifestTableId <- "syn5669833"
 
 ```
-```{r annotatedfilestable, results='asis'}
-annotFiles %>% 
-  dcast(CellLine + StainingSet ~ level, value.var = "id") %>% 
-  kable
-```
-## Raw Data
-```{r rawfilesquery}
-rawFolder <- "syn4997435"
-query <- sprintf(paste('select id,name,level,CellLine,StainingSet,Barcode,Location,Well',
-                       'from file where parentId=="%s"'), 
-                 rawFolder)
 
-rawFiles <- synQuery(query, blockSize = 400)$collectAll()
+## Data Release: **Pre-Release**
 
-colnames(rawFiles) <- gsub(".*\\.", "", colnames(rawFiles))
+This is the testing release and consists of data available `2016-02-19`.
+
+The file manifest is available at `r manifestTableId`.
+
+### Release Notes
+
+Anything here about the normalization, etc.
+
+```{r filesquery}
+manifestTableId <- "syn5669833"
+manifestTableSchema <- synTableQuery(paste("select * from ", manifestTableId))
+
+manifestTable <- manifestTableSchema@values
 ```
-```{r rawfilestable, results='asis'}
-rawFilesTbl <- dcast(rawFiles, 
-                     Barcode + CellLine + StainingSet + Location ~ Well, 
-                     value.var = "id")
+### Annotated Data and Analysis Reports
+```{r annotateddata}
+manifestTable %>% 
+  filter(level %in% c(1:4, "PipelineParameters", "AnalysisReport")) %>% 
+  mutate(id=paste(id, versionNumber, sep=".")) %>%
+  dcast(CellLine + StainingSet ~ level, value.var="id", fill=NA) %>% 
+  knitr::kable()
 ```
 
-```{r rawdatatable}
-kable(rawFilesTbl)
+#### Raw data files
+```{r rawdata, results='asis'}
+manifestTable %>%
+  filter(level == 0) %>% 
+  mutate(id=paste(id, versionNumber, sep=".")) %>%
+  dcast(Barcode + CellLine + StainingSet + Location ~ Well, value.var="id", fill=NA) %>% 
+  arrange(CellLine, Location, Barcode, StainingSet) %>% 
+  knitr::kable()
 ```
-
