@@ -9,11 +9,11 @@ library(tidyr)
 library(synapseClient)
 synapseLogin()
 
-annotatedFolder <- "syn5004301"
-rawFolder <- "syn4997435"
+annotatedFolder <- "syn5706203"
+rawFolder <- "syn5706233"
 reportFolder <- "syn5007815"
 
-query <- paste('select id,name,versionNumber,level,Barcode,CellLine,StainingSet,Location,Well',
+query <- paste('select id,name,versionNumber,Level,Barcode,CellLine,StainingSet,Location,Well',
                'from file where parentId=="%s"')
 
 annotFiles <- synQuery(sprintf(query, annotatedFolder), blockSize = 400)$collectAll()
@@ -24,10 +24,10 @@ allFiles <- rbind(annotFiles, rawFiles, reportFiles)
 colnames(allFiles) <- gsub(".*\\.", "", colnames(allFiles))
 
 allFiles <- allFiles %>%
-  filter(CellLine %in% c("PC3", "YAPC"), StainingSet %in% c("SS2")) %>% 
+  # filter(CellLine %in% c("PC3", "MCF7"), StainingSet %in% c("SS2")) %>% 
   mutate(versionNumber=as.numeric(versionNumber)) %>% 
-  arrange(level, CellLine, StainingSet) %>% 
-  select(id,versionNumber,name,level,Barcode,CellLine,StainingSet,Location,Well)
+  arrange(Level, CellLine, StainingSet) %>% 
+  select(id,versionNumber,name,Level,Barcode,CellLine,StainingSet,Location,Well)
 
 tableName <- "Pre-release manifest"
 tblCols <- as.tableColumns(allFiles)
@@ -35,17 +35,3 @@ schema <- TableSchema(name=tableName, columns=tblCols$tableColumns,
                       parent="syn2862345")
 tbl <- synStore(Table(tableSchema = schema, values=allFiles))
 
-# Raw data
-allFiles %>% 
-  filter(level == 0) %>% 
-  mutate(id=paste(id, versionNumber, sep=".")) %>%
-  dcast(Barcode + CellLine + StainingSet + Location ~ Well, value.var="id", fill=NA) %>% 
-  arrange(CellLine, Location, Barcode, StainingSet) %>% 
-  knitr::kable()
-
-# Processed data and analysis
-allFiles %>% 
-  filter(level != 0) %>% 
-  mutate(id=paste(id, versionNumber, sep=".")) %>%
-  dcast(CellLine + StainingSet ~ level, value.var="id", fill=NA) %>% 
-  knitr::kable()
